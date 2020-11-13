@@ -25,6 +25,7 @@ namespace EdgeDetection
         public MainWindow()
         {
             InitializeComponent();
+            
         }
 
         private void transfer_Click(object sender, RoutedEventArgs e)
@@ -35,7 +36,8 @@ namespace EdgeDetection
             byte[] pixels = new byte[s.PixelHeight * stride];
             s.CopyPixels(pixels, stride, 0);
 
-            //GaussianBlur(pixels,stride,s.PixelWidth,s.PixelHeight);
+
+            GaussianBlur(pixels,stride,s.PixelWidth,s.PixelHeight);
             EdgeCal(pixels, stride, s.PixelWidth, s.PixelHeight);
             
 
@@ -46,7 +48,7 @@ namespace EdgeDetection
 
         }
 
-        void EdgeCal(byte[] pixels,int stride,int width,int height)
+        void EdgeCal(byte[] pixels, int stride, int width, int height)
         {
             int[,] hOperator = new int[,]
             {
@@ -56,14 +58,17 @@ namespace EdgeDetection
             };
             int[,] vOperator = new int[,]
             {
-                { -1,-2,-1},
+                { 1,2,1},
                 { 0,0,0 },
-                { 1,2,1 }
+                { -1,-2,-1 }
             };
 
+
             byte[,] orients = new byte[height, width];
+            double[,] grandx = new double[height, width];
+            double[,] grandy = new double[height, width];
             double[,] gradients = new double[height, width];
-            double maxG = 0;
+            double maxGra = 0;
 
             for (int i = 1; i < height - 1; i++)
             {
@@ -86,94 +91,190 @@ namespace EdgeDetection
                         }
                     }
 
-                    double orientation = 45;
+
+                    grandx[i, j] = gx;
+                    grandy[i, j] = gy;
                     gradients[i, j] = Math.Sqrt(gx * gx + gy * gy);
-                    if (gradients[i, j] > maxG)
-                        maxG = gradients[i, j];
-                    if (gx == 0)
-                    {
-                        orientation = gy == 0 ? 0 : 90;
-                    }
+                    if (gradients[i, j] > maxGra)
+                        maxGra = gradients[i, j];
+
+                    double orientation = 0;
+
+                    orientation = Math.Atan2(gx, gy) * 180 / Math.PI;
+                    if (orientation >= 0 && orientation < 45)
+                        orientation = 0;
+                    else if (orientation < 90 && orientation >= 45)
+                        orientation = 1;
+                    else if (orientation < 135 && orientation >= 90)
+                        orientation = 2;
+                    else if (orientation < 180 && orientation >= 135)
+                        orientation = 3;
+                    else if (orientation < 0 && orientation >= -45)
+                        orientation = 3;
+                    else if (orientation < -45 && orientation >= -90)
+                        orientation = 2;
+                    else if (orientation < -90 && orientation > -135)
+                        orientation = 1;
                     else
-                    {
-                        double div = gy / gx;
-                        if (div < 0)
-                        {
-                            if(gy < 0)
-                                orientation = Math.Atan(-div) * 180 / Math.PI;
-                            else
-                                orientation = 180 - Math.Atan(-div) * 180 / Math.PI;
-                        }
-                        else
-                        {
-                            orientation = Math.Atan(div) * 180 / Math.PI;
-                        }
+                        orientation = 0;
 
-                        if (orientation < 22.5)
-                            orientation = 0;
-                        else if (orientation < 67.5)
-                            orientation = 45;
-                        else if (orientation < 112.5)
-                            orientation = 90;
-                        else if (orientation < 157.5)
-                            orientation = 135;
-                        else
-                            orientation = 0;
-
-                    }
-
-                    orients[i,j] = (byte)orientation;
+                    orients[i, j] = (byte)orientation;
                 }
             }
 
+            //64个等级直方图信息
+            int[] hists = new int[64];
 
+            for (int i = 1; i < height - 1; i++)
+            {
+                for (int j = 1; j < width - 1; j++)
+                {
+                    gradients[i, j] = gradients[i, j] / maxGra;
+
+                    byte index = (byte)(gradients[i, j] * 64);
+                    hists[index == 64 ? 63 : index] ++;
+                }
+            }
+
+            double high = 0;
+            double low = 0;
+            for(int i = 0;i < 64;i ++)
+            {
+                if (i > 0)
+                    hists[i] += hists[i - 1];
+                if(hists[i] > 0.8 * height * width)
+                {
+                    high = i / 64d;
+                    break;
+                }
+            }
+            low = 0.4 * high;
+
+            double[,] grays = new double[height, width];
             double left = 0, right = 0;
             for (int i = 1; i < height - 1; i++)
             {
                 for (int j = 1; j < width - 1; j++)
                 {
-
-                    switch (orients[i,j])
+                    double d = 0;
+                    double E = gradients[i, j + 1];
+                    double NE = gradients[i - 1, j + 1];
+                    double N = gradients[i - 1, j];
+                    double NW = gradients[i - 1, j - 1];
+                    double W = gradients[i, j - 1];
+                    double SW = gradients[i + 1, j - 1];
+                    double S = gradients[i + 1, j];
+                    double SE = gradients[i + 1, j + 1];
+                    switch (orients[i, j])
                     {
                         case 0:
-                            left = gradients[i - 1, j];
-                            right = gradients[i + 1, j];
+                            d = Math.Abs(grandy[i, j] / grandx[i, j]);
+                            left = SW * d + W * (1 - d);
+                            right = NE * d + E * (1 - d);
                             break;
-                        case 45:
-                            left = gradients[i - 1, j + 1];
-                            right = gradients[i + 1, j - 1];
+                        case 1:
+                            d = Math.Abs(grandx[i, j] / grandy[i, j]);
+                            left = SW * d + S * (1 - d);
+                            right = NE * d + N * (1 - d);
                             break;
-                        case 90:
-                            left = gradients[i, j + 1];
-                            right = gradients[i, j - 1];
+                        case 2:
+                            d = Math.Abs(grandx[i, j] / grandy[i, j]);
+                            left = NW * d + N * (1 - d);
+                            right = SE * d + S * (1 - d);
                             break;
-                        case 135:
-                            left = gradients[i + 1, j + 1];
-                            right = gradients[i - 1, j - 1];
+                        case 3:
+                            d = Math.Abs(grandy[i, j] / grandx[i, j]);
+                            left = NW * d + W * (1 - d);
+                            right = SE * d + E * (1 - d);
+                            break;
+                        case 254:
+                            left = S;
+                            right = N;
+                            break;
+                        case 255:
+                            left = W;
+                            right = E;
                             break;
                     }
 
-                    int start = i * stride + j * 4;
-                    if (gradients[i, j] < left || gradients[i, j] < right)
+
+                    if (gradients[i, j] >= left && gradients[i, j] >= right)
                     {
-                        pixels[start] = 255;
-                        pixels[start + 1] = 255;
-                        pixels[start + 2] = 255;
+                        if (gradients[i, j] > high)
+                        {
+                            grays[i, j] = 1;
+                        }
+                        else if (gradients[i, j] > low )
+                        {
+                            grays[i, j] = 0.4;
+                        }
+                        else
+                        {
+                            grays[i, j] = 0;
+                        }
                     }
                     else
                     {
-                        pixels[start] = 0;
-                        pixels[start + 1] = 0;
-                        pixels[start + 2] = 0;
+                        grays[i, j] = 0;
                     }
+                }
+            }
 
+            byte[,] newGrays = new byte[height, width];
+            for (int i = 1; i < height - 1; i++)
+            {
+                for (int j = 1; j < width - 1; j++)
+                {
+                    if (grays[i, j] > 0 && grays[i, j] < 1)
+                    {
+                        for (int x = -1; x <= 1; x++)
+                        {
+                            for (int y = -1; y <= 1; y++)
+                            {
+                                if (grays[i + x, j + x] == 1 && grays[i, j] > 0)
+                                {
+                                    newGrays[i, j] = 1;
+                                }
+                            }
+                        }
+
+                        if (newGrays[i, j] < 1) newGrays[i, j] = 0;
+                    }
+                    else
+                    {
+                        newGrays[i, j] = (byte)grays[i, j];
+                    }
+                }
+            }
+
+            //using (FileStream fs = File.OpenWrite("data.txt"))
+            //{
+            //    using (StreamWriter sw = new StreamWriter(fs))
+            //    {
+            //        for (int i = 0; i < height; i++)
+            //        {
+            //            for (int j = 0; j < width; j++)
+            //            {
+            //                sw.Write(gradients[i, j] + " ");
+            //            }
+            //            sw.WriteLine();
+            //        }
+            //    }
+            //}
+
+            for (int i = 0; i < height; i++)
+            {
+                for (int j = 0; j < width; j++)
+                {
+                    int start = i * stride + j * 4;
+                    pixels[start] = pixels[start + 1] = pixels[start + 2] = (byte)(newGrays[i, j] * 255);
                 }
             }
         }
 
         double[,] GenerateGaussianRect(int radius)
         {
-            double sigma = radius + 0.5d;
+            double sigma = radius / 2 + 0.5d;
 
             double[,] dest = new double[radius * 2 + 1, radius * 2 + 1];
             double total = 0;
@@ -199,20 +300,21 @@ namespace EdgeDetection
 
         void GaussianBlur(byte[] source,int stride,int width,int height)
         {
-            double[,] gaussianRect = GenerateGaussianRect(2);
+            int radius = 2;
+            double[,] gaussianRect = GenerateGaussianRect(radius);
 
-            for(int row = 2;row < height - 2; row ++)
+            for (int row = radius; row < height - radius; row ++)
             {
-                for(int col = 2;col < width - 2;col ++)
+                for(int col = radius; col < width - radius; col ++)
                 {
                     double r = 0, g = 0, b = 0;
-                    for(int rs = -2;rs <= 2;rs ++)
+                    for(int rs = -radius; rs <= radius; rs ++)
                     {
-                        for (int cs = -2; cs <= 2; cs++)
+                        for (int cs = -radius; cs <= radius; cs++)
                         {
-                            b += source[(row + rs) * stride + (col + cs) * 4] * gaussianRect[(2 + rs), 2 + cs];
-                            g += source[(row + rs) * stride + (col + cs) * 4 + 1] * gaussianRect[(2 + rs), 2 + cs];
-                            r += source[(row + rs) * stride + (col + cs) * 4 + 2] * gaussianRect[(2 + rs), 2 + cs];
+                            b += source[(row + rs) * stride + (col + cs) * 4] * gaussianRect[(radius + rs), radius + cs];
+                            g += source[(row + rs) * stride + (col + cs) * 4 + 1] * gaussianRect[(radius + rs), radius + cs];
+                            r += source[(row + rs) * stride + (col + cs) * 4 + 2] * gaussianRect[(radius + rs), radius + cs];
                         }
                     }
 
