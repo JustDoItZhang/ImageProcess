@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OpenCvSharp;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,7 +21,7 @@ namespace EdgeDetection
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : System.Windows.Window
     {
         public MainWindow()
         {
@@ -30,25 +31,36 @@ namespace EdgeDetection
 
         private void transfer_Click(object sender, RoutedEventArgs e)
         {
+
+            //using Mat src = new Mat(@"D:\Vs_Project\ImageProcess\EdgeDetection\test.png", ImreadModes.Grayscale);
+            //using var dst = new Mat();
+
+            //Cv2.Canny(src, dst, 50, 200);
+            //using (new OpenCvSharp.Window("src image", src))
+            //using (new OpenCvSharp.Window("dst image", dst))
+            //{
+            //    Cv2.WaitKey();
+            //}
+
+
             BitmapSource s = sourceImage.Source as BitmapSource;
 
             int stride = s.PixelWidth * s.Format.BitsPerPixel / 8;
             byte[] pixels = new byte[s.PixelHeight * stride];
             s.CopyPixels(pixels, stride, 0);
+            GaussianBlur(pixels, stride, s.PixelWidth, s.PixelHeight);
+            byte[] newByte = EdgeCal(pixels, stride, s.PixelWidth, s.PixelHeight);
 
 
-            GaussianBlur(pixels,stride,s.PixelWidth,s.PixelHeight);
-            EdgeCal(pixels, stride, s.PixelWidth, s.PixelHeight);
-            
 
-
-            BitmapSource newBs = BitmapSource.Create(s.PixelWidth,s.PixelHeight,s.DpiX,s.DpiY,s.Format,s.Palette, pixels, stride);
+            BitmapSource newBs = BitmapSource.Create(s.PixelWidth, s.PixelHeight, s.DpiX, s.DpiY, PixelFormats.Gray8, 
+                null, newByte, s.PixelWidth);
             transferedImage.Source = newBs;
 
 
         }
 
-        void EdgeCal(byte[] pixels, int stride, int width, int height)
+        byte[] EdgeCal(byte[] pixels, int stride, int width, int height)
         {
             int[,] hOperator = new int[,]
             {
@@ -82,7 +94,7 @@ namespace EdgeDetection
                         for (int v = -1; v <= 1; v++)
                         {
                             int nstart = (i + h) * stride + (v + j) * 4;
-                            double gray = (pixels[nstart + 2] * 0.3 + pixels[nstart + 1] * 0.59 + pixels[nstart] * 0.11);
+                            double gray = (pixels[nstart + 2] * 0.299 + pixels[nstart + 1] * 0.587 + pixels[nstart] * 0.114);
 
                             double x = gray * hOperator[h + 1, v + 1];
                             double y = gray * vOperator[h + 1, v + 1];
@@ -100,7 +112,7 @@ namespace EdgeDetection
 
                     double orientation = 0;
 
-                    orientation = Math.Atan2(gx, gy) * 180 / Math.PI;
+                    orientation = Math.Atan(gy/gx) * 180 / Math.PI;
                     if (orientation >= 0 && orientation < 45)
                         orientation = 0;
                     else if (orientation < 90 && orientation >= 45)
@@ -149,7 +161,7 @@ namespace EdgeDetection
                 }
             }
             low = 0.4 * high;
-
+            
             double[,] grays = new double[height, width];
             double left = 0, right = 0;
             for (int i = 1; i < height - 1; i++)
@@ -206,7 +218,7 @@ namespace EdgeDetection
                         }
                         else if (gradients[i, j] > low )
                         {
-                            grays[i, j] = 0.4;
+                            grays[i, j] = low;
                         }
                         else
                         {
@@ -225,20 +237,21 @@ namespace EdgeDetection
             {
                 for (int j = 1; j < width - 1; j++)
                 {
-                    if (grays[i, j] > 0 && grays[i, j] < 1)
+                    if (grays[i, j] == low)
                     {
                         for (int x = -1; x <= 1; x++)
                         {
                             for (int y = -1; y <= 1; y++)
                             {
-                                if (grays[i + x, j + x] == 1 && grays[i, j] > 0)
+                                if (grays[i + x, j + y] == 1)
                                 {
                                     newGrays[i, j] = 1;
+                                    break;
                                 }
                             }
-                        }
 
-                        if (newGrays[i, j] < 1) newGrays[i, j] = 0;
+                            if (newGrays[i, j] == 1) break;
+                        }
                     }
                     else
                     {
@@ -261,15 +274,18 @@ namespace EdgeDetection
             //        }
             //    }
             //}
-
+            byte[] newPix = new byte[height * width];
             for (int i = 0; i < height; i++)
             {
                 for (int j = 0; j < width; j++)
                 {
-                    int start = i * stride + j * 4;
-                    pixels[start] = pixels[start + 1] = pixels[start + 2] = (byte)(newGrays[i, j] * 255);
+                    //int start = i * stride + j * 4;
+                    //pixels[start] = pixels[start + 1] = pixels[start + 2] = (byte)(newGrays[i, j] * 255);
+                    int start = i * width + j;
+                    newPix[start] = (byte)(newGrays[i, j] * 255);
                 }
             }
+            return newPix;
         }
 
         double[,] GenerateGaussianRect(int radius)

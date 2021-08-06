@@ -20,16 +20,16 @@
 
         <Image
             x:Name="sourceImage"
-            Width="478"
-            Height="480"
-            Source="test3.png"
+            Width="{Binding Path=Source.PixelWidth}"
+            Height="{Binding Path=Source.PixelHeight}"
+            Source="test.png"
             Stretch="Fill" />
         <Image
             x:Name="transferedImage"
             Grid.Row="0"
             Grid.Column="1"
-            Width="478"
-            Height="480"
+            Width="{Binding Path=Source.PixelWidth}"
+            Height="{Binding Path=Source.PixelHeight}"
             Stretch="Fill" />
         <Button
             x:Name="transfer"

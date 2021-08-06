@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.5.3.20210725" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="test.png" />
     <Resource Include="test2.png" />
     <Resource Include="test3.png" />
